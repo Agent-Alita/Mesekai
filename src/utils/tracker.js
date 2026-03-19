@@ -1,7 +1,34 @@
 import { FaceLandmarker, PoseLandmarker, HandLandmarker, FilesetResolver } from '@mediapipe/tasks-vision'
 
-import { TRACKER_DEVICE, TRACKER_MODE } from '@/utils/constants'
+import { TRACKER_DEVICE, TRACKER_MODE, BODY_EURO_FILTER, HAND_EURO_FILTER, FACE_EURO_FILTER, HEAD_EURO_FILTER } from '@/utils/constants'
+import { Vector3Filter } from '@/utils/euroFilter'
 
+// One Euro filters for smoothing landmarks
+let faceFilters = []
+let bodyFilters = []
+let lHandFilters = []
+let rHandFilters = []
+
+// Initialize filters on module load
+function initializeFilters() {
+    if (faceFilters.length === 0) {
+        faceFilters = Array.from({ length: 468 }, () => new Vector3Filter(FACE_EURO_FILTER.minCutoff, FACE_EURO_FILTER.beta))
+    }
+    if (bodyFilters.length === 0) {
+        bodyFilters = Array.from({ length: 33 }, () => new Vector3Filter(BODY_EURO_FILTER.minCutoff, BODY_EURO_FILTER.beta))
+    }
+    if (lHandFilters.length === 0) {
+        lHandFilters = Array.from({ length: 21 }, () => new Vector3Filter(HAND_EURO_FILTER.minCutoff, HAND_EURO_FILTER.beta))
+    }
+    if (rHandFilters.length === 0) {
+        rHandFilters = Array.from({ length: 21 }, () => new Vector3Filter(HAND_EURO_FILTER.minCutoff, HAND_EURO_FILTER.beta))
+    }
+}
+
+// Initialize filters immediately
+initializeFilters()
+
+export { lHandFilters, rHandFilters }
 
 export async function createTrackers() {
     const filesetResolver = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm')
@@ -44,7 +71,6 @@ export async function createTrackers() {
     return [faceTracker, bodyTracker, handTracker]
 }
 
-
 export function drawFaceLandmarks(landmarks, drawingUtils, lineWidth) {
     if (landmarks.length > 0) {
         drawingUtils.drawConnectors(landmarks[0], FaceLandmarker.FACE_LANDMARKS_TESSELATION, { color: '#C0C0C070', lineWidth: lineWidth })
@@ -59,14 +85,12 @@ export function drawFaceLandmarks(landmarks, drawingUtils, lineWidth) {
     }
 }
 
-
 export function drawBodyLandmarks(landmarks, drawingUtils, landmarkRadius, lineWidth) {
     if (landmarks.length > 0) {
         drawingUtils.drawLandmarks(landmarks[0], {radius: landmarkRadius})
         drawingUtils.drawConnectors(landmarks[0], PoseLandmarker.POSE_CONNECTIONS, { color: 'lime', lineWidth: lineWidth })
     }
 }
-
 
 export function drawHandLandmarks(landmarks, drawingUtils, landmarkRadius, lineWidth) {
     for (const handLandmarks of landmarks) {
@@ -75,20 +99,33 @@ export function drawHandLandmarks(landmarks, drawingUtils, landmarkRadius, lineW
     }
 }
 
-// given array of shape (nFrames, nLandmarks), modifies index 0 to be the average of all frames
-export function computeAvgLandmarks(landmarksFrames) {
-    for (let frameIdx = 1; frameIdx < landmarksFrames.length; frameIdx++) {
-        for (let landmarkIdx = 0; landmarkIdx < landmarksFrames[frameIdx].length; landmarkIdx++) {
-            const landmark = landmarksFrames[frameIdx][landmarkIdx]
-            landmarksFrames[0][landmarkIdx].x += landmark.x
-            landmarksFrames[0][landmarkIdx].y += landmark.y
-            landmarksFrames[0][landmarkIdx].z += landmark.z
-        }
+// Apply One Euro filter to landmarks
+export function filterLandmarks(landmarks, filters) {
+    const filteredLandmarks = []
+    for (let i = 0; i < landmarks.length; i++) {
+        const lm = landmarks[i]
+        const filtered = filters[i].filter(lm.x, lm.y, lm.z)
+        filteredLandmarks.push({
+            x: filtered.x,
+            y: filtered.y,
+            z: filtered.z,
+            visibility: lm.visibility || 1.0
+        })
     }
+    return filteredLandmarks
+}
 
-    for (let landmarkIdx = 0; landmarkIdx < landmarksFrames[0].length; landmarkIdx++) {
-        landmarksFrames[0][landmarkIdx].x /= landmarksFrames.length
-        landmarksFrames[0][landmarkIdx].y /= landmarksFrames.length
-        landmarksFrames[0][landmarkIdx].z /= landmarksFrames.length
-    }
+// Apply One Euro filter to body landmarks
+export function filterBodyLandmarks(landmarks) {
+    return filterLandmarks(landmarks, bodyFilters)
+}
+
+// Apply One Euro filter to hand landmarks
+export function filterHandLandmarks(landmarks, filters) {
+    return filterLandmarks(landmarks, filters)
+}
+
+// Apply One Euro filter to face landmarks
+export function filterFaceLandmarks(landmarks) {
+    return filterLandmarks(landmarks, faceFilters)
 }

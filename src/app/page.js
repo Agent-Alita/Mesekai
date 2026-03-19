@@ -16,15 +16,17 @@ import Controls from '@/components/controls'
 import { 
     CAM_WIDTH, CAM_HEIGHT, SCENES, DEFAULT_SCENE, 
     FULLBODY_LOOKAT, HALFBODY_LOOKAT, HEADONLY_LOOKAT, 
-    LM_VIS_THRESH, lHIP, rHIP, 
-    BODY_SMOOTHING_FRAMES, HAND_SMOOTHING_FRAMES
+    LM_VIS_THRESH, lHIP, rHIP
 } from '@/utils/constants'
 import {
     createTrackers,
     drawFaceLandmarks,
     drawBodyLandmarks,
     drawHandLandmarks,
-    computeAvgLandmarks
+    filterBodyLandmarks,
+    filterHandLandmarks,
+    lHandFilters,
+    rHandFilters
 } from '@/utils/tracker'
 import './globals.css'
 import Social from '@/components/social'
@@ -35,10 +37,6 @@ let faceTracker, bodyTracker, handTracker
 let trackFace = true
 let trackBody = true
 let trackHands = true
-
-const bodyFrames = []
-const lHandFrames = []
-const rHandFrames = []
 
 
 function processFrame(frame, drawingUtils, setFaceLandmarks, setBodyLandmarks, setlHandLandmarks, setrHandLandmarks, setLegsVisible) {    
@@ -55,17 +53,12 @@ function processFrame(frame, drawingUtils, setFaceLandmarks, setBodyLandmarks, s
     if (trackBody) {
         const trackingResult = bodyTracker.detectForVideo(frame, performance.now())
 
-        // animate avatar
+        // animate avatar with One Euro filter
         if (trackingResult.worldLandmarks && trackingResult.worldLandmarks.length > 0) {
             const landmarks = trackingResult.worldLandmarks[0]
-            bodyFrames.push(landmarks)
-
-            if (bodyFrames.length == BODY_SMOOTHING_FRAMES) {
-                computeAvgLandmarks(bodyFrames)
-                setBodyLandmarks(bodyFrames[0])
-                bodyFrames.shift()
-                setLegsVisible(landmarks[lHIP].visibility > LM_VIS_THRESH && landmarks[rHIP].visibility > LM_VIS_THRESH)
-            }
+            const filteredLandmarks = filterBodyLandmarks(landmarks)
+            setBodyLandmarks(filteredLandmarks)
+            setLegsVisible(filteredLandmarks[lHIP].visibility > LM_VIS_THRESH && filteredLandmarks[rHIP].visibility > LM_VIS_THRESH)
         }
 
         // draw video overlay
@@ -75,21 +68,16 @@ function processFrame(frame, drawingUtils, setFaceLandmarks, setBodyLandmarks, s
     if (trackHands) {
         const trackingResult = handTracker.detectForVideo(frame, performance.now())
         
-        // animate avatar
+        // animate avatar with One Euro filter
         for (let handIdx = 0; handIdx < trackingResult.handedness.length; handIdx++) {
             const handedness = trackingResult.handedness[handIdx][0]['categoryName']
-            const handFrames = (handedness == 'Left') ? lHandFrames : rHandFrames
             const landmarks = trackingResult.worldLandmarks[handIdx]
-            handFrames.push(landmarks)
-
-            if (handFrames.length == HAND_SMOOTHING_FRAMES) {
-                computeAvgLandmarks(handFrames)
-                if (handedness == 'Left') {
-                    setlHandLandmarks(handFrames[0])
-                } else {
-                    setrHandLandmarks(handFrames[0])
-                }
-                handFrames.shift()
+            const filteredLandmarks = filterHandLandmarks(landmarks, (handedness == 'Left') ? lHandFilters : rHandFilters)
+            
+            if (handedness == 'Left') {
+                setlHandLandmarks(filteredLandmarks)
+            } else {
+                setrHandLandmarks(filteredLandmarks)
             }
         }
 
