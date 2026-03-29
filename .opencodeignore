@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Next.js Build Artifacts
+.next/
+out/
+build/
+
+# Lockfiles (High token density, zero logical value)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+bun.lockb
+
+# Environment Variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# Testing
+coverage/
+
+# Static Media (Unparseable by AST)
+public/**/*.png
+public/**/*.jpg
+public/**/*.jpeg
+public/**/*.gif
+public/**/*.svg
+public/**/*.ico
+public/**/*.webp
+public/**/*.mp4
+public/**/*.webm
+*.ico
+
+# OS/System Files
+.DS_Store
+Thumbs.db
+
+.continue/
+.git/
