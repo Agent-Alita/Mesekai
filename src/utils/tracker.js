@@ -3,32 +3,17 @@ import { FaceLandmarker, PoseLandmarker, HandLandmarker, FilesetResolver } from 
 import { TRACKER_DEVICE, TRACKER_MODE, BODY_EURO_FILTER, HAND_EURO_FILTER, FACE_EURO_FILTER, HEAD_EURO_FILTER } from '@/utils/constants'
 import { Vector3Filter } from '@/utils/euroFilter'
 
-// One Euro filters for smoothing landmarks
-let faceFilters = []
-let bodyFilters = []
-let lHandFilters = []
-let rHandFilters = []
+export function createFilters() {
+    const faceFilters = Array.from({ length: 468 }, () => new Vector3Filter(FACE_EURO_FILTER.minCutoff, FACE_EURO_FILTER.beta))
+    const bodyFilters = Array.from({ length: 33 }, () => new Vector3Filter(BODY_EURO_FILTER.minCutoff, BODY_EURO_FILTER.beta))
+    const lHandFilters = Array.from({ length: 21 }, () => new Vector3Filter(HAND_EURO_FILTER.minCutoff, HAND_EURO_FILTER.beta))
+    const rHandFilters = Array.from({ length: 21 }, () => new Vector3Filter(HAND_EURO_FILTER.minCutoff, HAND_EURO_FILTER.beta))
 
-// Initialize filters on module load
-function initializeFilters() {
-    if (faceFilters.length === 0) {
-        faceFilters = Array.from({ length: 468 }, () => new Vector3Filter(FACE_EURO_FILTER.minCutoff, FACE_EURO_FILTER.beta))
-    }
-    if (bodyFilters.length === 0) {
-        bodyFilters = Array.from({ length: 33 }, () => new Vector3Filter(BODY_EURO_FILTER.minCutoff, BODY_EURO_FILTER.beta))
-    }
-    if (lHandFilters.length === 0) {
-        lHandFilters = Array.from({ length: 21 }, () => new Vector3Filter(HAND_EURO_FILTER.minCutoff, HAND_EURO_FILTER.beta))
-    }
-    if (rHandFilters.length === 0) {
-        rHandFilters = Array.from({ length: 21 }, () => new Vector3Filter(HAND_EURO_FILTER.minCutoff, HAND_EURO_FILTER.beta))
-    }
+    return { faceFilters, bodyFilters, lHandFilters, rHandFilters }
 }
 
-// Initialize filters immediately
-initializeFilters()
-
-export { lHandFilters, rHandFilters }
+export function releaseFilters() {
+}
 
 export async function createTrackers() {
     const filesetResolver = await FilesetResolver.forVisionTasks('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm')
@@ -116,16 +101,15 @@ export function filterLandmarks(landmarks, filters) {
 }
 
 // Apply One Euro filter to body landmarks
-export function filterBodyLandmarks(landmarks) {
+export function filterBodyLandmarks(landmarks, bodyFilters) {
     return filterLandmarks(landmarks, bodyFilters)
 }
 
-// Apply One Euro filter to hand landmarks
 export function filterHandLandmarks(landmarks, filters) {
     return filterLandmarks(landmarks, filters)
 }
 
-// Apply One Euro filter to face landmarks
-export function filterFaceLandmarks(landmarks) {
+export function filterFaceLandmarks(landmarks, faceFilters) {
     return filterLandmarks(landmarks, faceFilters)
 }
+

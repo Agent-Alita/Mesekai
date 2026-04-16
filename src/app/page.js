@@ -25,50 +25,38 @@ import {
     drawHandLandmarks,
     filterBodyLandmarks,
     filterHandLandmarks,
-    lHandFilters,
-    rHandFilters
+    filterFaceLandmarks,
+    createFilters
 } from '@/utils/tracker'
 import './globals.css'
 import Social from '@/components/social'
 
-let trackersCreated = false
-let faceTracker, bodyTracker, handTracker
-
-let trackFace = true
-let trackBody = true
-let trackHands = true
-
-
-function processFrame(frame, drawingUtils, setFaceLandmarks, setBodyLandmarks, setlHandLandmarks, setrHandLandmarks, setLegsVisible) {    
+function processFrame(frame, drawingUtils, setFaceLandmarks, setBodyLandmarks, setlHandLandmarks, setrHandLandmarks, setLegsVisible, trackFace, trackBody, trackHands, faceTracker, bodyTracker, handTracker, faceFilters, bodyFilters, lHandFilters, rHandFilters) {    
     if (trackFace) {
         const trackingResult = faceTracker.detectForVideo(frame, performance.now())
         
-        // animate avatar
-        setFaceLandmarks(trackingResult)
+        const filteredFaceLandmarks = filterFaceLandmarks(trackingResult.faceLandmarks, faceFilters)
+        setFaceLandmarks(filteredFaceLandmarks)
 
-        // draw video overlay
-        drawFaceLandmarks(trackingResult.faceLandmarks, drawingUtils, CAM_HEIGHT / 1000)
+        drawFaceLandmarks(filteredFaceLandmarks, drawingUtils, CAM_HEIGHT / 1000)
     }
 
     if (trackBody) {
         const trackingResult = bodyTracker.detectForVideo(frame, performance.now())
 
-        // animate avatar with One Euro filter
         if (trackingResult.worldLandmarks && trackingResult.worldLandmarks.length > 0) {
             const landmarks = trackingResult.worldLandmarks[0]
-            const filteredLandmarks = filterBodyLandmarks(landmarks)
+            const filteredLandmarks = filterBodyLandmarks(landmarks, bodyFilters)
             setBodyLandmarks(filteredLandmarks)
             setLegsVisible(filteredLandmarks[lHIP].visibility > LM_VIS_THRESH && filteredLandmarks[rHIP].visibility > LM_VIS_THRESH)
         }
 
-        // draw video overlay
         drawBodyLandmarks(trackingResult.landmarks, drawingUtils, CAM_HEIGHT / 1000, CAM_HEIGHT / 500)
     }
 
     if (trackHands) {
         const trackingResult = handTracker.detectForVideo(frame, performance.now())
         
-        // animate avatar with One Euro filter
         for (let handIdx = 0; handIdx < trackingResult.handedness.length; handIdx++) {
             const handedness = trackingResult.handedness[handIdx][0]['categoryName']
             const landmarks = trackingResult.worldLandmarks[handIdx]
@@ -81,11 +69,9 @@ function processFrame(frame, drawingUtils, setFaceLandmarks, setBodyLandmarks, s
             }
         }
 
-        // draw video overlay
         drawHandLandmarks(trackingResult.landmarks, drawingUtils, CAM_HEIGHT / 1000, CAM_HEIGHT / 1000)
     }
 }
-
 
 export default function Home() {
     const [inMesekai, setInMesekai] = useState(true)
@@ -100,6 +86,14 @@ export default function Home() {
     const [trackLegs, setTrackLegs] = useState(true)
     const [scene, setScene] = useState(DEFAULT_SCENE)
     const [lookAt, setLookAt] = useState(FULLBODY_LOOKAT)
+    const [trackFace, setTrackFace] = useState(true)
+    const [trackBody, setTrackBody] = useState(true)
+    const [trackHands, setTrackHands] = useState(true)
+    const [trackersCreated, setTrackersCreated] = useState(false)
+    const [faceTracker, setFaceTracker] = useState(null)
+    const [bodyTracker, setBodyTracker] = useState(null)
+    const [handTracker, setHandTracker] = useState(null)
+    const [filters, setFilters] = useState(null)
 
     const video = useRef(null)
     const canvas = useRef(null)
@@ -108,14 +102,28 @@ export default function Home() {
         const drawingUtils = new DrawingUtils(canvasCtx)
         let lastVideoTime = -1
 
+        async function initializeTrackers() {
+            try {
+                const [ft, bt, ht] = await createTrackers()
+                const newFilters = createFilters()
+                setFilters(newFilters)
+                setFaceTracker(ft)
+                setBodyTracker(bt)
+                setHandTracker(ht)
+                setTrackersCreated(true)
+            } catch (error) {
+                console.error('Failed to initialize trackers:', error)
+            }
+        }
+
         const camera = new Camera(video.current, {
             onFrame: async () => {
                 if (!trackersCreated) {
-                    [faceTracker, bodyTracker, handTracker] = await createTrackers()
-                    trackersCreated = true
+                    await initializeTrackers()
+                    return
                 }
 
-                if (lastVideoTime != video.current.currentTime) {
+                if (lastVideoTime != video.current.currentTime && faceTracker && bodyTracker && handTracker && filters) {
                     lastVideoTime = video.current.currentTime
                     canvasCtx.save()
                     canvasCtx.clearRect(0, 0, canvas.current.width, canvas.current.height)
@@ -125,7 +133,17 @@ export default function Home() {
                         setBodyLandmarks, 
                         setlHandLandmarks, 
                         setrHandLandmarks, 
-                        setLegsVisible
+                        setLegsVisible,
+                        trackFace,
+                        trackBody,
+                        trackHands,
+                        faceTracker,
+                        bodyTracker,
+                        handTracker,
+                        filters.faceFilters,
+                        filters.bodyFilters,
+                        filters.lHandFilters,
+                        filters.rHandFilters
                     )
                     canvasCtx.restore()
                 }
@@ -137,8 +155,17 @@ export default function Home() {
 
         return function cleanup() {
             camera.stop()
+            if (faceTracker) faceTracker.close()
+            if (bodyTracker) bodyTracker.close()
+            if (handTracker) handTracker.close()
+            if (filters) {
+                filters.faceFilters = null
+                filters.bodyFilters = null
+                filters.lHandFilters = null
+                filters.rHandFilters = null
+            }
         }
-    }, [])
+    }, [trackersCreated, trackFace, trackBody, trackHands, faceTracker, bodyTracker, handTracker, filters])
 
     return (
         <>
@@ -152,8 +179,7 @@ export default function Home() {
             >
                 <CameraDisplay video={video} canvas={canvas}/>
                 
-                {/* avatar scene */}
-                <Canvas
+                < Canvas
                     style={{
                         top: 0,
                         left: 0,
@@ -181,10 +207,9 @@ export default function Home() {
                         left: '1%',
                     }}
                 >
-                    {/* body part tracking selection */}
                     <Switch checkedChildren='Face' unCheckedChildren='Face' defaultChecked 
                         onChange={(checked) => {
-                            trackFace = checked
+                            setTrackFace(checked)
                             if (!checked) {
                                 setFaceLandmarks(null)
                                 resetFace()
@@ -193,7 +218,7 @@ export default function Home() {
                     />
                     <Switch checkedChildren='Body' unCheckedChildren='Body' defaultChecked
                         onChange={(checked) => {
-                            trackBody = checked
+                            setTrackBody(checked)
                             if (checked) {
                                 if (trackLegs) {
                                     setLookAt(FULLBODY_LOOKAT)
@@ -223,7 +248,7 @@ export default function Home() {
                     />
                     <Switch checkedChildren='Hands' unCheckedChildren='Hands' defaultChecked
                         onChange={(checked) => {
-                            trackHands = checked
+                            setTrackHands(checked)
                             if (!checked) {
                                 setlHandLandmarks(null)
                                 setrHandLandmarks(null)
@@ -232,7 +257,6 @@ export default function Home() {
                         }}
                     />
 
-                    {/* scene selection */}
                     <Dropdown
                         menu={{
                             items: SCENES,
@@ -276,7 +300,6 @@ export default function Home() {
                 />
             )}
 
-            {/* avatar creator toggle */}
             <Radio.Group
                 value={inMesekai}
                 onChange={(event) => {
