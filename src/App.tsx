@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three-stdlib'
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { GridHelper } from 'three'
+import Webcam from './components/Webcam'
 
 function App() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -65,7 +66,12 @@ function App() {
     }
   }, [])
 
-  return <div ref={containerRef} style={{ width: '100vw', height: '100vh', background: '#808080' }} />
+  return (
+    <>
+      <div ref={containerRef} style={{ width: '100vw', height: '100vh', background: '#808080' }} />
+      <Webcam />
+    </>
+  )
 }
 
 export default App
