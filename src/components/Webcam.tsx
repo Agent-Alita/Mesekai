@@ -8,6 +8,7 @@ import type {
   Results,
 } from '@mediapipe/holistic'
 import type { Camera as CameraType } from '@mediapipe/camera_utils'
+import { poseStore } from '../lib/poseStore'
 
 // MediaPipe's npm packages are UMD/IIFE scripts that attach their exports to
 // the global object rather than using real ES module exports. Pull the symbols
@@ -71,6 +72,7 @@ function Webcam() {
 
     const onResults = (results: Results) => {
       if (cancelled) return
+      poseStore.latest = results
       const { width, height } = canvas
 
       ctx.save()

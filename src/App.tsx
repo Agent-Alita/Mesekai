@@ -4,6 +4,8 @@ import { OrbitControls } from 'three-stdlib'
 import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { GridHelper } from 'three'
 import Webcam from './components/Webcam'
+import { poseStore } from './lib/poseStore'
+import { applyPose, captureRestDirections, indexBones, type BoneMap, type RestMap } from './lib/retargeting'
 
 function App() {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -20,15 +22,24 @@ function App() {
     renderer.setClearColor(0x808080)
     container.appendChild(renderer.domElement)
 
+    let bones: BoneMap | null = null
+    let restDirs: RestMap | null = null
+
     const loader = new FBXLoader()
     loader.load('/ybot.fbx', (object: THREE.Object3D) => {
       scene.add(object)
       const box = new THREE.Box3().setFromObject(object)
       const size = box.getSize(new THREE.Vector3())
+      const center = box.getCenter(new THREE.Vector3())
       const maxDim = Math.max(size.x, size.y, size.z)
       const fov = camera.fov * (Math.PI / 180)
       const cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2)) * 1.5
-      camera.position.z = cameraZ
+      camera.position.set(0, center.y, cameraZ)
+      controls.target.set(0, center.y, 0)
+      controls.update()
+
+      bones = indexBones(object)
+      restDirs = captureRestDirections(bones)
     })
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 1)
@@ -48,6 +59,9 @@ function App() {
 
     const animate = () => {
       requestAnimationFrame(animate)
+      if (bones && restDirs && poseStore.latest) {
+        applyPose(bones, restDirs, poseStore.latest, { slerp: 0.4, visibilityThreshold: 0.1 })
+      }
       controls.update()
       renderer.render(scene, camera)
     }
